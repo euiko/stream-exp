@@ -14,6 +14,11 @@ type (
 		Scan(interface{}) error
 	}
 
+	KeyedData interface {
+		Data
+		Key() interface{}
+	}
+
 	StringData struct {
 		ts    time.Time
 		value string
@@ -22,6 +27,11 @@ type (
 	MapData struct {
 		ts    time.Time
 		value map[string]interface{}
+	}
+
+	keyedData struct {
+		data Data
+		key  interface{}
 	}
 )
 
@@ -77,6 +87,33 @@ func (s StringData) Scan(v interface{}) error {
 
 	*ptr = s.value
 	return nil
+}
+
+func (d *keyedData) Is(t Type) bool {
+	return d.data.Is(t)
+}
+
+func (d *keyedData) Type() Type {
+	return d.data.Type()
+}
+
+func (d *keyedData) Ts() time.Time {
+	return d.data.Ts()
+}
+
+func (d *keyedData) Scan(target interface{}) error {
+	return d.data.Scan(target)
+}
+
+func (d *keyedData) Key() interface{} {
+	return d.key
+}
+
+func newKeyedData(key interface{}, d Data) *keyedData {
+	return &keyedData{
+		data: d,
+		key:  key,
+	}
 }
 
 func Map(ts time.Time, value map[string]interface{}) MapData {
