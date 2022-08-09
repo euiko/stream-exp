@@ -12,7 +12,7 @@ type (
 	Pipe interface {
 		Start(context.Context) error
 		Stop() error
-		Process(ExecutionContext, Data) error
+		Process(context.Context, Data) error
 	}
 
 	pipe struct {
@@ -38,7 +38,7 @@ func (p *pipe) Stop() error {
 	return nil
 }
 
-func (p *pipe) Process(ec ExecutionContext, data Data) error {
+func (p *pipe) Process(ctx context.Context, data Data) error {
 	return p.source.Send(p.ctx, data)
 }
 

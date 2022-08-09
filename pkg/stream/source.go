@@ -2,8 +2,8 @@ package stream
 
 import (
 	"bufio"
+	"context"
 	"os"
-	"time"
 )
 
 type (
@@ -14,10 +14,12 @@ type (
 	SourceOption func(*SourceSettings)
 	Source       interface {
 		Type() Type
-		Open(ExecutionContext, ...SourceOption) error
+		Open(context.Context) error
 		Close() error
-		DataStream() DataStream
+		Sink() Channel
 	}
+
+	SourceFactory func(...SourceOption) Source
 
 	SourceFile struct {
 		settings SourceSettings
@@ -31,11 +33,8 @@ type (
 func (s *SourceFile) Type() Type {
 	return StringType
 }
-func (s *SourceFile) Open(ec ExecutionContext, options ...SourceOption) error {
+func (s *SourceFile) Open(ctx context.Context) error {
 	var err error
-
-	s.settings = newSourceSettings(options...)
-	s.sink = s.settings.channelFactory()
 
 	s.file, err = os.OpenFile(s.name, os.O_RDONLY, os.ModePerm)
 	if err != nil {
@@ -45,7 +44,7 @@ func (s *SourceFile) Open(ec ExecutionContext, options ...SourceOption) error {
 		scanner := bufio.NewScanner(s.file)
 		scanner.Split(bufio.ScanLines)
 		for scanner.Scan() {
-			s.sink.Send(ec.Context(), String(time.Now(), scanner.Text()))
+			s.sink.Send(ctx, String(scanner.Text()))
 		}
 	}()
 
@@ -55,13 +54,23 @@ func (s *SourceFile) Open(ec ExecutionContext, options ...SourceOption) error {
 func (s *SourceFile) Close() error {
 	return s.file.Close()
 }
-func (s *SourceFile) DataStream(options ...DataStreamOption) DataStream {
-	return newDataStream(s.sink, s.Type(), options...)
+func (s *SourceFile) Sink() Channel {
+	return s.sink
 }
 
-func NewSourceFile(name string) *SourceFile {
-	return &SourceFile{
-		name: name,
+func NewSourceFile(name string, options ...SourceOption) *SourceFile {
+	s := SourceFile{
+		name:     name,
+		settings: newSourceSettings(options...),
+	}
+
+	s.sink = s.settings.channelFactory()
+	return &s
+}
+
+func SourceFileFactory(name string) SourceFactory {
+	return func(options ...SourceOption) Source {
+		return NewSourceFile(name, options...)
 	}
 }
 

@@ -8,7 +8,6 @@ type (
 	DataStreamOption func(*dataStream)
 
 	DataStream interface {
-		Type() Type
 		Name() string
 
 		KeyBy(KeyFunc, ...DataStreamOption) DataStream
@@ -19,14 +18,13 @@ type (
 	}
 
 	dataStream struct {
-		dataType Type
-		name     string
+		name string
 
-		executionContext ExecutionContext
-		source           Channel
-		channelFactory   ChannelFactory
+		source         Channel
+		channelFactory ChannelFactory
 
-		pipes []Pipe
+		childs []*dataStream
+		pipes  []Pipe
 	}
 )
 
@@ -42,22 +40,19 @@ func DataStreamName(name string) DataStreamOption {
 	}
 }
 
-func (ds *dataStream) Type() Type {
-	return ds.dataType
-}
 func (ds *dataStream) Name() string {
 	return ds.name
 }
 func (ds *dataStream) KeyBy(f KeyFunc, options ...DataStreamOption) DataStream {
-	return ds.Process(newProcessorFactoryFunc(ds.dataType, func() Processor {
+	return ds.Process(func() Processor {
 		return f
-	}), options...)
+	}, options...)
 }
 
 func (ds *dataStream) Filter(f FilterFunc, options ...DataStreamOption) DataStream {
-	return ds.Process(newProcessorFactoryFunc(ds.dataType, func() Processor {
+	return ds.Process(func() Processor {
 		return f
-	}), options...)
+	}, options...)
 }
 
 func (ds *dataStream) Process(f ProcessorFactory, options ...DataStreamOption) DataStream {
@@ -68,8 +63,10 @@ func (ds *dataStream) Process(f ProcessorFactory, options ...DataStreamOption) D
 
 	source, sink := ds.channelFactory(), ds.channelFactory()
 	pipe := newPipe(source, sink)
+	nextDs := newDataStream(sink, options...)
+
 	ds.pipes = append(ds.pipes, pipe)
-	nextDs := newDataStream(sink, f.Type(), options...)
+	ds.childs = append(ds.childs, nextDs)
 
 	ds.source.Listen(context.Background(), ListenerFunc(func(ctx context.Context, d Data) error {
 		var (
@@ -80,32 +77,51 @@ func (ds *dataStream) Process(f ProcessorFactory, options ...DataStreamOption) D
 			key := keyed.Key()
 			processor, ok = keyedProcessors[key]
 			if !ok {
-				processor = f.Create()
+				processor = f()
 				keyedProcessors[key] = processor
 			}
 		} else {
 			if singleProcessor == nil {
-				singleProcessor = f.Create()
+				singleProcessor = f()
 			}
 			processor = singleProcessor
 		}
 
-		return processor.Process(ds.executionContext, processFunc, d)
+		return processor.Process(ctx, processFunc, d)
 	}))
 	return nextDs
 }
 
 func (ds *dataStream) Map(f MapperFactory, options ...DataStreamOption) DataStream {
-	return nil
+	return ds.Process(func() Processor {
+		return MapperFunc(f().Map)
+	})
 }
 
 func (ds *dataStream) AddSink(f SinkFactory, options ...DataStreamOption) DataStream {
+	return ds.Process(func() Processor {
+		return SinkFunc(f().Handle)
+	})
+}
+
+func (ds *dataStream) start(ctx context.Context) error {
+	for _, p := range ds.pipes {
+		if err := p.Start(ctx); err != nil {
+			return err
+		}
+	}
+
+	for _, child := range ds.childs {
+		if err := child.start(ctx); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
-func newDataStream(source Channel, dataType Type, options ...DataStreamOption) *dataStream {
+func newDataStream(source Channel, options ...DataStreamOption) *dataStream {
 	ds := dataStream{
-		dataType:       dataType,
 		name:           "",
 		source:         source,
 		channelFactory: DefaultChannelFactory,

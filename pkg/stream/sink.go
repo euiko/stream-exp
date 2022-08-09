@@ -4,9 +4,18 @@ import "context"
 
 type (
 	Sink interface {
-		Type() Type
-		Handle(ExecutionContext, Data) error
+		Handle(context.Context, Data) error
 	}
 
-	SinkFactory func(context.Context) Sink
+	SinkFunc func(context.Context, Data) error
+
+	SinkFactory func() Sink
 )
+
+func (f SinkFunc) Handle(ctx context.Context, d Data) error {
+	return f(ctx, d)
+}
+
+func (f SinkFunc) Process(ctx context.Context, p Process, d Data) error {
+	return f.Handle(ctx, d)
+}
