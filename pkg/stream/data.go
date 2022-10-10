@@ -18,16 +18,14 @@ type (
 
 	String string
 
+	Int int
+
 	Map map[string]interface{}
 
 	keyedData struct {
 		data Data
 		key  interface{}
 	}
-)
-
-const (
-	mapTimeKey = "x-attr-ts"
 )
 
 func (m Map) Is(t Type) bool {
@@ -60,6 +58,24 @@ func (s String) Scan(v interface{}) error {
 	return nil
 }
 
+func (s Int) Is(t Type) bool {
+	return t == IntType
+}
+
+func (s Int) Type() Type {
+	return IntType
+}
+
+func (s Int) Scan(v interface{}) error {
+	ptr, ok := v.(*int)
+	if !ok {
+		return ErrScanInvalidType
+	}
+
+	*ptr = int(s)
+	return nil
+}
+
 func (d *keyedData) Is(t Type) bool {
 	return d.data.Is(t)
 }
@@ -76,7 +92,7 @@ func (d *keyedData) Key() interface{} {
 	return d.key
 }
 
-func newKeyedData(key interface{}, d Data) *keyedData {
+func NewKeyedData(key interface{}, d Data) *keyedData {
 	return &keyedData{
 		data: d,
 		key:  key,

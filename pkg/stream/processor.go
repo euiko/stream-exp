@@ -46,7 +46,7 @@ func (f MapperFunc) Process(ctx context.Context, p Process, d Data) error {
 }
 
 func (f KeyFunc) Process(ctx context.Context, p Process, d Data) error {
-	return p.Process(ctx, newKeyedData(f(d), d))
+	return p.Process(ctx, NewKeyedData(f(d), d))
 }
 
 func (f FilterFunc) Process(ctx context.Context, p Process, d Data) error {

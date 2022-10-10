@@ -14,6 +14,7 @@ var typeIndex int32 = 0
 var (
 	StringType = NewType()
 	MapType    = NewType()
+	IntType    = NewType()
 )
 
 var (
